@@ -1,0 +1,188 @@
+# -*- coding: utf-8 -*-
+"""
+@author: SanaeElMehdaoui
+"""
+from __future__ import print_function
+from sklearn.datasets import fetch_20newsgroups
+import numpy as np
+from time import time
+#from optparse import OptionParser
+from sklearn.feature_extraction.text import TfidfVectorizer
+#from sklearn.feature_extraction.text import HashingVectorizer
+#from sklearn.feature_extraction.text import TfidfTransformer
+#from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import Normalizer
+#import sys
+from sklearn.decomposition import TruncatedSVD
+import math
+from itertools import cycle
+from pylab import plot,show,xlabel,ylabel,title,grid,legend
+"""
+from sklearn import metrics
+from sklearn.cluster import KMeans, MiniBatchKMeans
+import logging
+"""
+#Function definition
+def chooser(data,k):
+	from random import choice
+	#pick r random points as initial centroids
+	#Temporary transform the points to tuples to allow their hashing
+	set_c = set(tuple(choice(data)) for _ in xrange(k))
+	
+	#Be sure the initialized centroids are all different
+	i = 0
+	n = len(data)
+	
+	#keep trying adding more different points
+	while len(set_c) < k and i < n and i < 4 * k:
+		set_c.add( tuple(data[i]))
+		i+=1
+	c = map(list, set_c)
+	if len(c) < k:
+		#Fill in missing centroids
+		c.extend(c[[0]] *  (k - len(c)))
+
+	return c
+
+def euclidianDistance(x1,x2):
+	b = (x2[1] - x1[1])**2
+	a = (x2[0] - x1[0])**2
+	
+	return math.sqrt(a + b)
+ 
+def kmeans(data,k):
+	
+	DOUBLE_MAX = 1.797693e308
+	n = len(data)
+	m = len(data[0])
+	
+	#size of each cluster
+	counts = [0] * k
+	labels = [0] * n
+	tmp_labels = [0] * n
+	#c1 is an array of len k of the temp centroids
+	c1 = []
+	for i in xrange(k):
+		c1.append([0.0] * m)
+	
+	#choose the k initial centroids
+	c = chooser(data,k)
+	nIter = 0
+	changed = False
+	#main loop
+	while True:
+		changed = False
+		#clear old counts and temp centroids
+		for i in xrange(k):
+			counts[i] = 0
+			for j in xrange(m):
+				c1[i][j] = 0
+		
+		
+		for h in xrange(n):
+			#identify the closest cluster
+			min_distance  = DOUBLE_MAX
+			for i in xrange(k):
+				distance = euclidianDistance(data[h],c[i])
+				if distance < min_distance:
+					tmp_labels[h] = i
+					min_distance = distance
+			
+			if tmp_labels[h] != labels[h]:
+				changed = True
+			
+			labels[h] = tmp_labels[h]
+				
+			#update size and temp centroid of the destination cluster
+			for j in xrange(m):
+				#Total of each attribute
+				c1[labels[h]][j] += data[h][j]
+			counts[labels[h]] += 1
+		
+		#Update all centroids
+		for i in xrange(k):
+			for j in xrange(m):
+				c[i][j] = c1[i][j] / counts[i]  if counts[i] else c1[i][j]
+			
+		
+		nIter +=1
+		
+		#If no label changed for all data, stop the algorithm
+			break
+
+	return labels,c
+# Load the dataset
+categories = [
+    'alt.atheism',
+    'talk.religion.misc',
+    'comp.graphics',
+    'sci.space',
+    'sci.electronics',
+    'soc.religion.christian',
+    'rec.sport.baseball',
+    'rec.sport.hockey',
+]
+
+print("Loading 20 newsgroups dataset for categories:")
+print(categories)
+
+dataset = fetch_20newsgroups(subset='all', categories=categories,shuffle=True, random_state=42)
+
+print("%d documents" % len(dataset.data))
+print("%d categories" % len(dataset.target_names))
+print(dataset.data)
+
+# Extraction feature 
+labels = dataset.target
+true_k = np.unique(labels).shape[0]
+print (labels[:10])
+
+print("Extracting features from the training dataset using a sparse vectorizer")
+t0 = time()
+vectorizer = TfidfVectorizer(max_df=0.5,stop_words='english', use_idf=True)
+X = vectorizer.fit_transform(dataset.data)
+n_samples, n_features = X.shape
+print("done in %fs" % (time() - t0))
+print("n_samples: %d, n_features: %d" % X.shape)
+print()
+
+# LSA dimension reduction
+print("Performing dimensionality reduction using LSA")
+t0 = time()
+lsa = TruncatedSVD()
+X = lsa.fit_transform(X)
+# Data Normalisation
+#X = Normalizer(copy=False).fit_transform(X)
+print("done in %fs" % (time() - t0))
+print()
+
+# Clustring with k-means
+k = int(6)
+labels, centroids = kmeans(X,k)
+	
+print ("Python version, labels:", labels)
+print ("Python version, centroids:", centroids)
+	
+clusters2 = [[] for _ in xrange(k)]
+for i, p in enumerate(X):
+	clusters2[labels[i]].append(p)
+	
+	#---- PLOT THE DATA SET AFTER KMEANS
+	#Plot each cluster with a different color , as round points
+
+colors = cycle("rgbcmyk")
+#clusters2.sort()
+
+for group, (cx,cy), color in zip(clusters2,centroids,colors):
+	px,py = zip(*group)
+	#Plot the group points
+	plot(px,py, "o" + color)
+	#Add triangle to represent their centroid
+	plot([cx],[cy], '^' + 'y')
+	#Add the subtitles
+	#xlabel('')
+	#ylabel('')
+	grid(True)
+	#title('')
+	legend(('alt.atheism', 'comp.graphics', 'sci.space', 'talk.religion.misc'), scatterpoints = 1,loc='lower right' )
+	show()
